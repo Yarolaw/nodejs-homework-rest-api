@@ -1,26 +1,20 @@
-const fs = require('fs/promises');
 const Joi = require('joi');
-const path = require('path');
-const { v4: uuid } = require('uuid');
-
-const contactsPath = path.join(__dirname, './contacts.json');
+const contactModel = require('../schemas/contacts');
+const { isValidObjectId } = require('mongoose');
 
 const listContacts = async (req, res) => {
-  const data = await fs.readFile(contactsPath, 'utf-8');
-  const parseContacs = JSON.parse(data);
-  res.send(parseContacs);
+  const data = await contactModel.find();
+  res.status(200).json(data);
 };
 
 const getContactById = async (req, res, next) => {
   try {
     const { contactId } = req.params;
-    const data = await fs.readFile(contactsPath, 'utf-8');
-    const parseContacs = JSON.parse(data);
-    const contact = parseContacs.find(contact => contact.id === contactId);
-    res.json({
-      status: 'success',
-      data: { contact },
-    });
+    const contact = await contactModel.findById(contactId);
+
+    return contact
+      ? res.json({ status: 'success', data: { contact } })
+      : res.status(404).json('Contact not found');
   } catch (error) {
     next(error);
   }
@@ -28,39 +22,24 @@ const getContactById = async (req, res, next) => {
 
 const removeContact = async (req, res, next) => {
   try {
-    const data = await fs.readFile(contactsPath, 'utf-8');
-    const parseContacs = JSON.parse(data);
-    const newContacts = parseContacs.filter(
-      contact => contact.id !== req.params.contactId,
-    );
+    const { contactId } = req.params;
+    const removeContact = await contactModel.findByIdAndRemove(contactId);
 
-    const newContactsJson = JSON.stringify(newContacts);
-
-    fs.writeFile(contactsPath, newContactsJson);
-
-    res.json({
-      status: 'success',
-      data: {},
-      message: 'COntact delete success',
-    });
+    return removeContact
+      ? res.json({
+          status: 'success',
+          data: {},
+          message: 'Contact delete success',
+        })
+      : res.status(404).send('User not found');
   } catch (error) {
     next(error);
   }
 };
+
 const addContact = async (req, res, next) => {
   try {
-    const data = await fs.readFile(contactsPath, 'utf-8');
-    const parseContacs = JSON.parse(data);
-    const newContact = {
-      id: uuid(),
-      ...req.body,
-    };
-
-    const newContacts = [...parseContacs, newContact];
-
-    const newContactsJson = JSON.stringify(newContacts);
-
-    fs.writeFile(contactsPath, newContactsJson);
+    const newContact = await contactModel.create(req.body);
 
     res.json({
       status: 'success',
@@ -73,33 +52,40 @@ const addContact = async (req, res, next) => {
 
 const updateContact = async (req, res, next) => {
   try {
-    const data = await fs.readFile(contactsPath, 'utf-8');
-    const parseContacs = JSON.parse(data);
-    const contactToChange = parseContacs.find(contact => {
-      return contact.id === req.params.contactId;
-    });
+    const { contactId } = req.params;
 
-    const newContacts = parseContacs.map(contact => {
-      if (contact.id === contactToChange.id) {
-        return (contact = {
-          id: contactToChange.id,
-          ...req.body,
-        });
-      }
-      return contact;
-    });
-
-    const newContactsJson = JSON.stringify(newContacts);
-    fs.writeFile(contactsPath, newContactsJson);
-    res.json({
-      statuss: 'success',
-      data: {
-        contact: {
-          id: contactToChange.id,
-          ...req.body,
-        },
+    const updatedContact = await contactModel.findByIdAndUpdate(
+      contactId,
+      {
+        ...req.body,
       },
-    });
+      {
+        new: true,
+      },
+    );
+
+    return updatedContact
+      ? res.status(200).json(updatedContact)
+      : res.status(404).send('User not found');
+  } catch (error) {
+    next(error);
+  }
+};
+
+const updateStatusContact = async (req, res, next) => {
+  try {
+    const { contactId } = req.params;
+    const { favorite = false } = req.body;
+
+    const updatedStatus = await contactModel.findByIdAndUpdate(
+      contactId,
+      { $set: { favorite } },
+      { new: true },
+    );
+
+    return updatedStatus
+      ? res.status(200).json(updatedStatus)
+      : res.status(404).json('Not found');
   } catch (error) {
     next(error);
   }
@@ -128,27 +114,33 @@ const validateUpdateContact = (req, res, next) => {
     name: Joi.string(),
     email: Joi.string(),
     phone: Joi.string(),
-  });
-
-  const validBodyReq = req.body.name || req.body.email || req.body.phone;
+  }).min(1);
 
   const validationResult = updateContactRules.validate(req.body);
 
-  if (!validBodyReq || validationResult.error) {
-    const newError = new Error();
-    newError.status = 400;
-    newError.type = 'UpdateContact';
-    throw newError;
+  if (validationResult.error) {
+    return res.status(400).send(validationResult.error);
   }
 
   next();
 };
+
+const validateId = (req, res, next) => {
+  if (!isValidObjectId(req.params.contactId)) {
+    return res.status(400).send('Invalid id');
+  }
+
+  next();
+};
+
 module.exports = {
   listContacts,
   getContactById,
   removeContact,
   addContact,
   updateContact,
+  updateStatusContact,
   validateCreateContact,
   validateUpdateContact,
+  validateId,
 };

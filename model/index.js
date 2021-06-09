@@ -27,10 +27,10 @@ const removeContact = async (req, res, next) => {
 
     return removeContact
       ? res.json({
-          status: 'success',
-          data: {},
-          message: 'Contact delete success',
-        })
+        status: 'success',
+        data: {},
+        message: 'Contact delete success',
+      })
       : res.status(404).send('User not found');
   } catch (error) {
     next(error);

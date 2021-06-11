@@ -1,8 +1,12 @@
 const Joi = require('joi');
 const jwt = require('jsonwebtoken');
+const fs = require('fs').promises;
+const path = require('path');
+const Jimp = require('jimp');
 const { isValidObjectId } = require('mongoose');
 const User = require('../schemas/users');
 const SECRET_KEY = process.env.SECRET_KEY;
+const AVATAR_OF_USERS = process.env.AVATAR_OF_USERS;
 
 const validateId = (req, res, next) => {
   const { id } = req.params;
@@ -57,7 +61,39 @@ const authorize = async (req, res, next) => {
     next(err);
   }
 };
+const updateAvatars = async (req, res, next) => {
+  try {
+    if (req.file) {
+      const { file } = req;
+      const img = await Jimp.read(file.path);
+      await img
+        .autocrop()
+        .cover(
+          250,
+          250,
+          Jimp.HORIZONTAL_ALIGN_CENTER,
+          Jimp.VERTICAL_ALIGN_MIDDLE
+        )
+        .writeAsync(file.path);
+      await fs.rename(file.path, path.join(AVATAR_OF_USERS, file.originalname));
+    }
+    const { _id: userId } = req.user;
 
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      {
+        $set: req.body,
+      },
+      {
+        new: true,
+      }
+    );
+
+    return res.status(200).json({ avatarURL: updatedUser });
+  } catch (err) {
+    next(err);
+  }
+};
 const signUp = async (req, res, next) => {
   const { email } = req.body;
   const user = await User.findOne({ email });
@@ -145,6 +181,7 @@ const getCurrentUser = async (req, res, next) => {
 
 module.exports = {
   signUp,
+  updateAvatars,
   signIn,
   logout,
   getCurrentUser,

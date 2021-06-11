@@ -3,7 +3,7 @@ const contactModel = require('../schemas/contacts');
 const { isValidObjectId } = require('mongoose');
 
 const listContacts = async (req, res) => {
-  const data = await contactModel.find();
+  const data = await contactModel.find(1);
   res.status(200).json(data);
 };
 
@@ -27,10 +27,10 @@ const removeContact = async (req, res, next) => {
 
     return removeContact
       ? res.json({
-        status: 'success',
-        data: {},
-        message: 'Contact delete success',
-      })
+          status: 'success',
+          data: {},
+          message: 'Contact delete success',
+        })
       : res.status(404).send('User not found');
   } catch (error) {
     next(error);
@@ -61,7 +61,7 @@ const updateContact = async (req, res, next) => {
       },
       {
         new: true,
-      },
+      }
     );
 
     return updatedContact
@@ -80,7 +80,7 @@ const updateStatusContact = async (req, res, next) => {
     const updatedStatus = await contactModel.findByIdAndUpdate(
       contactId,
       { $set: { favorite } },
-      { new: true },
+      { new: true }
     );
 
     return updatedStatus

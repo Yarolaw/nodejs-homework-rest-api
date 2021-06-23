@@ -3,8 +3,11 @@ const jwt = require('jsonwebtoken');
 const fs = require('fs').promises;
 const path = require('path');
 const Jimp = require('jimp');
+const EmailService = require('./email');
+const { CreateSenderSendGrid } = require('./email-sender');
 const { isValidObjectId } = require('mongoose');
 const User = require('../schemas/users');
+require('dotenv').config();
 const SECRET_KEY = process.env.SECRET_KEY;
 const AVATAR_OF_USERS = process.env.AVATAR_OF_USERS;
 
@@ -108,9 +111,17 @@ const signUp = async (req, res, next) => {
       const user = new User(body);
       return await user.save();
     };
-    const data = await createUser({
-      ...req.body,
-    });
+    const data = await createUser(req.body);
+
+    try {
+      const emailService = new EmailService(
+        process.env.NODE_ENV,
+        new CreateSenderSendGrid()
+      );
+      await emailService.sendVerifyEmail(data.verifyToken, email, data.name);
+    } catch (error) {
+      console.log(error.message);
+    }
 
     return res.status(201).json({
       status: 'success',
@@ -128,7 +139,7 @@ const signIn = async (req, res, next) => {
 
     const user = await User.findOne({ email });
     const isValidPassword = await user?.isValidPassword(req.body.password);
-    if (!user || !isValidPassword) {
+    if (!user || !isValidPassword || !user.verify) {
       return res.status(401).json({
         status: 'error',
         code: 401,
@@ -154,6 +165,57 @@ const signIn = async (req, res, next) => {
     next(err);
   }
 };
+const repeatEmailVerification = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    const user = await User.findOne({ email });
+    if (user) {
+      const { name, email, verify, verifyToken } = user;
+      if (!verify) {
+        const emailService = new EmailService(
+          process.env.NODE_ENV,
+          new CreateSenderSendGrid()
+        );
+        await emailService.sendVerifyEmail(verifyToken, email, name);
+        return res.json({
+          status: 'success',
+          code: 200,
+          data: { message: 'Verification email sent!' },
+        });
+      }
+      return res.status(400).json({
+        status: 'error',
+        code: 400,
+        message: 'Verification has already been passed',
+      });
+    }
+    return res.status(404).json({
+      status: 'error',
+      code: 404,
+      message: 'User not found',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const verify = async (req, res, next) => {
+  try {
+    const { verificationToken } = req.params;
+
+    const user = await User.findOne({ verifyToken: verificationToken });
+    if (!user) {
+      return res.status(404).json('User not found');
+    }
+
+    await User.findByIdAndUpdate(user._id, { verifyToken: null, verify: true });
+
+    return res.status(200).json({ message: 'Verification successful' });
+  } catch (err) {
+    next(err);
+  }
+};
+
 const logout = async (req, res, next) => {
   try {
     const userId = req.user.id;
@@ -188,4 +250,6 @@ module.exports = {
   validateId,
   authorize,
   authValidation,
+  verify,
+  repeatEmailVerification,
 };

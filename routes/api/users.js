@@ -8,6 +8,8 @@ const {
   authorize,
   authValidation,
   updateAvatars,
+  verify,
+  repeatEmailVerification,
 } = require('../../model/usersControllers');
 
 const upload = require('../../helpers/upload.js');
@@ -17,5 +19,8 @@ router.post('/login', authValidation, signIn);
 router.post('/logout', authorize, logout);
 router.post('/current', authorize, getCurrentUser);
 router.patch('/avatars', authorize, upload.single('avatar'), updateAvatars);
+
+router.get('/verify/:verificationToken', verify);
+router.post('/verify', repeatEmailVerification);
 
 module.exports = router;
